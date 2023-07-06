@@ -162,6 +162,7 @@ class PuckTracker:
         self.P = None
 
     def reset(self, puck_pos):
+        print("kalman filter: reset function")
         self.P = np.eye(6)
         self.state = np.zeros(6)
         self.state[[0, 1, 4]] = puck_pos

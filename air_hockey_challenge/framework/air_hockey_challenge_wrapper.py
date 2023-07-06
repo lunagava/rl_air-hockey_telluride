@@ -5,7 +5,7 @@ import time
 
 
 from mushroom_rl.core import Environment
-from air_hockey_challenge.utils.hitting_agent import HittingAgent
+from air_hockey_challenge.utils.defending_agent import DefendingAgent
 from copy import deepcopy
 
 
@@ -28,7 +28,7 @@ class AirHockeyChallengeWrapper(Environment):
 
         """
 
-        #print("Environment: ", Environment)
+        print("Environment: ", Environment)
         env_dict = {
             "3dof-hit": (position.PlanarPositionHit, {}),
             "3dof-defend": (position.PlanarPositionDefend, {}),
@@ -55,12 +55,11 @@ class AirHockeyChallengeWrapper(Environment):
 
         super().__init__(self.base_env.info)
 
-    def step(self, action):
-        #print("air_hockey_challenge_wrapper, action: ", action)
-        #print("info: ", self.base_env.info)
+    def step(self, action, discrete):
+        # print("air_hockey_challenge_wrapper, action: ", action)
         ########## qui dato il valore di action si potrebbe determinare una traiettoria verso destra, sinistra, avanti o indietro
         ######### tale traiettoria consisterà nell'azione che passo al mujoco, che dovrà essere un array di 6 elementi
-        #print("action: ", action)
+        # print("action: ", action)
         obs, reward, done, info = self.base_env.step(action)
         #print("observation: ",obs)
         if "opponent" in self.env_name:
@@ -68,7 +67,7 @@ class AirHockeyChallengeWrapper(Environment):
             #print("action: ", action)
         else:
             action = self.base_env.action
-            #print("actionn: ", action)
+            # print("actionn: ", action)
 
         if self.base_env.n_agents == 1:
             info["constraints_value"] = deepcopy(self.env_info['constraints'].fun(obs[self.env_info['joint_pos_ids']],
@@ -91,15 +90,18 @@ class AirHockeyChallengeWrapper(Environment):
 
     def render(self):
         self.base_env.render()
-        agent = HittingAgent(self.base_env.env_info)
+        agent = DefendingAgent(self.base_env.env_info)
         return agent
 
-    def core_step(self, idx, env, obs, agent, render):
+    def close(self):
+        self.base_env.stop()
+
+    def core_step(self, idx, action, env, obs, agent, render):
         start_time = time.time()
-        action = agent.draw_action(obs)
+        discrete = action
+        action = agent.draw_action(obs,action)
         end_time = time.time()
-        #print("action: ", action[idx])
-        next_state, reward, absorbing, step_info = env.step(action)
+        next_state, reward, absorbing, step_info = env.step(action, discrete)
         step_info["computation_time"] = (end_time - start_time)
 
        # self._episode_steps += 1
@@ -155,7 +157,7 @@ if __name__ == "__main__":
         R += reward
         steps += 1
         if done or steps > env.info.horizon:
-            #print("J: ", J, " R: ", R)
+            print("J: ", J, " R: ", R)
             R = 0.
             J = 0.
             gamma = 1.

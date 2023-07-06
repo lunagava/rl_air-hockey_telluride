@@ -62,7 +62,7 @@ class PositionControl:
         return clipped_pos, clipped_vel
 
     def _controller(self, desired_pos, desired_vel, desired_acc, current_pos, current_vel):
-        #print("sono dentro controller :)")
+        # print("sono dentro controller :)")
         clipped_pos, clipped_vel = self._enforce_safety_limits(desired_pos, desired_vel)
 
         error = (clipped_pos - current_pos)
@@ -74,11 +74,11 @@ class PositionControl:
         tau_ff = np.zeros(self.robot_model.nv)
         for i in range(self.n_agents):
             robot_joint_ids = np.arange(self.n_robot_joints) + self.n_robot_joints * i
-            #print("robot joint ids: ", robot_joint_ids)
+            # print("robot joint ids: ", robot_joint_ids)
             self.robot_data.qpos = current_pos[robot_joint_ids]
             self.robot_data.qvel = current_vel[robot_joint_ids]
-            #print("current vel: ", current_vel)
-            #print("desired acc: ", desired_acc)
+            # print("current vel: ", current_vel)
+            # print("desired acc: ", desired_acc)
             acc_ff = desired_acc[robot_joint_ids]
             mujoco.mj_forward(self.robot_model, self.robot_data)
 
@@ -161,19 +161,19 @@ class PositionControl:
     def _step_init(self, obs, action):
         super(PositionControl, self)._step_init(obs, action)
         self.action = action
-        #print("action in position_control_wrapper: ", action)
+        # print("action in position_control_wrapper: ", action)
         self.traj = self._interpolate_trajectory(self.action)
 
     def _compute_action(self, obs, action):
-        #print("-------------------------------------------------------------------------------------")
+        print("-------------------------------------------------------------------------------------")
         cur_pos, cur_vel = self.get_joints(obs)
-        #print("Osservazione: ", obs)
-        #print("current position: ", cur_pos)
-        #print("current velocity: ", cur_vel)
-        #print("traiettoria: ", self.traj)
+        # print("Osservazione: ", obs)
+        # print("current position: ", cur_pos)
+        # print("current velocity: ", cur_vel)
+        # print("traiettoria: ", self.traj)
 
         desired_pos, desired_vel, desired_acc = next(self.traj)
-        #print("obs: ", obs)
+        # print("obs: ", obs)
         #desired_pos = obs[0:3]
         #print("desired pos: ", desired_pos)
         #desired_vel = 0.1*np.ones(3)

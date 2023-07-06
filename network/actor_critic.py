@@ -146,8 +146,8 @@ class ActorCritic(object):
         Outputs: state value, action values'''
         
         ## set update_action to an array of 0's with one value for each action
-        #print("update_action: ", update_action)
-        #print("state: ", state)
+        # print("update_action: ", update_action)
+        # print("state: ", state)
         
         self.update_action[:] = 0
         ## set the update_action value at the position of the chosen action to 1
@@ -355,9 +355,9 @@ class ActorCriticLDN(object):
         Outputs: state value, action values'''
         
         ## set update_action to an array of 0's with one value for each action
-        #print("sono qui")
-        #print("update_Action: ", update_action)
-        #print("state: ", state)
+        # print("sono qui")
+        # print("update_Action: ", update_action)
+        # print("state: ", state)
         self.update_action[:] = 0
         ## set the update_action value at the position of the chosen action to 1
         self.update_action[update_action] = 1

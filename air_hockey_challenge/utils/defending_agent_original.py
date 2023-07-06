@@ -3,8 +3,7 @@ import threading
 import numpy as np
 from scipy.interpolate import CubicSpline
 from air_hockey_challenge.framework.agent_base import AgentBase
-from air_hockey_challenge.utils import inverse_kinematics, world_to_robot
-from baseline.baseline_agent import BezierPlanner, TrajectoryOptimizer
+from baseline.baseline_agent import BezierPlanner, TrajectoryOptimizer, PuckTracker
 
 
 def build_agent(env_info, **kwargs):
@@ -18,16 +17,17 @@ def build_agent(env_info, **kwargs):
     Returns:
          (AgentBase) An instance of the Agent
     """
-    return HittingAgent(env_info, **kwargs)
+    return DefendingAgent(env_info, **kwargs)
 
 
-class HittingAgent(AgentBase):
+class DefendingAgent(AgentBase):
     def __init__(self, env_info, agent_id=1, **kwargs):
-        super(HittingAgent, self).__init__(env_info, agent_id, **kwargs)
+        super(DefendingAgent, self).__init__(env_info, agent_id, **kwargs)
         self.last_cmd = None
         self.joint_trajectory = None
         self.restart = True
         self.optimization_failed = False
+        self.has_planned = False
         self.dt = 1 / self.env_info['robot']['control_frequency']
         self.ee_height = self.env_info['robot']["ee_desired_height"]
 
@@ -35,8 +35,8 @@ class HittingAgent(AgentBase):
                                        -(self.env_info['table']['width'] / 2 - 0.05)],
                                       [-(self.env_info['table']['length'] / 2 - 0.05),
                                        (self.env_info['table']['width'] / 2 - 0.05)],
-                                      [-0.2, (self.env_info['table']['width'] / 2 - 0.05)],
-                                      [-0.2, -(self.env_info['table']['width'] / 2 - 0.05)]])
+                                      [-0.3, (self.env_info['table']['width'] / 2 - 0.05)],
+                                      [-0.3, -(self.env_info['table']['width'] / 2 - 0.05)]])
         self.bound_points = self.bound_points + np.tile([1.51, 0.], (4, 1))
         self.boundary_idx = np.array([[0, 1], [1, 2], [0, 3]])
 
@@ -47,79 +47,89 @@ class HittingAgent(AgentBase):
         self.bezier_planner = BezierPlanner(table_bounds, self.dt)
         self.optimizer = TrajectoryOptimizer(self.env_info)
         if self.env_info['robot']['n_joints'] == 3:
-            self.joint_anchor_pos = np.array([-1.15570723,  1.30024401,  1.44280414])
+            self.joint_anchor_pos = np.array([-0.9273, 0.9273, np.pi / 2])
         else:
             self.joint_anchor_pos = np.array([6.28479822e-11, 7.13520517e-01, -2.96302903e-11, -5.02477487e-01,
                                               -7.67250279e-11, 1.92566224e+00, -2.34645597e-11])
 
+        self.puck_tracker = PuckTracker(env_info, agent_id=agent_id)
+        self._obs = None
+
     def reset(self):
         self.last_cmd = None
         self.joint_trajectory = []
+        print("defendin_agent: reset function")
         self.restart = True
+        self.has_planned = False
         self.optimization_failed = False
+
+        self._obs = None
+
+        self.plan_thread = threading.Thread(target=self._plan_trajectory_thread)
+        self.plan_thread.start()
 
     def draw_action(self, obs):
         if self.restart:
             self.restart = False
-            print("draw_action, obs: ", obs)
-            puck_pos = self.get_puck_pos(obs)
-            print("draw_action, puck pos: ", puck_pos)
-            puck_vel = self.get_puck_vel(obs)
-            print("draw_action, puck vel: ", puck_vel)
-            joint_pos = self.get_joint_pos(obs)
-            print("draw_action, joint_pos: ", joint_pos)
-            joint_vel = self.get_joint_vel(obs)
-            print("draw_action, joint_vel: ", joint_vel)
-            ee_pos, _ = self.get_ee_pose(obs)
-            print("draw_action, ee_pos:", ee_pos)
-            
-            self.last_cmd = np.vstack([joint_pos, joint_vel])
-            self.plan_thread = threading.Thread(target=self._plan_trajectory_thread, args=(puck_pos, ee_pos, joint_pos, joint_vel))
-            self.plan_thread.start()
+            self.puck_tracker.reset(self.get_puck_pos(obs))
+            self.last_cmd = np.vstack([self.get_joint_pos(obs), self.get_joint_vel(obs)])
+
+        self.puck_tracker.step(self.get_puck_pos(obs))
+        print("defending agent: draw action -> joint trajectory: ", self.joint_trajectory)
+        self._obs = obs.copy()
 
         if self.joint_trajectory is not None and len(self.joint_trajectory) > 0:
             joint_pos_des, joint_vel_des = self.joint_trajectory[0]
+            print("defending agent: draw_action, sono dentro if len>0")
             self.joint_trajectory = self.joint_trajectory[1:]
             self.last_cmd[1] = joint_vel_des
             self.last_cmd[0] = joint_pos_des
         else:
             self.last_cmd[1] = np.zeros(self.env_info['robot']['n_joints'])
-            if not self.optimization_failed:
-                time.sleep(0.01)
+            print("defending agent: draw action, sono dentro l'else")
+            if not self.has_planned:
+                time.sleep(0.005)
+        print("defending agent: draw action -> last cmd: ", self.last_cmd)
         return self.last_cmd
 
-    def _plan_trajectory_thread(self, puck_pos, ee_pos, joint_pos, joint_vel):
-        ee_traj, hit_idx, q_anchor = self.plan_ee_trajectory(puck_pos, ee_pos)
-        _, joint_pos_traj = self.optimizer.optimize_trajectory(ee_traj, joint_pos, joint_vel, q_anchor)
-        joint_pos_traj = self.get_joint_trajectory(ee_traj)
-        print("joint pos traj: ", joint_pos_traj)
-        if len(joint_pos_traj) > 0:
-            self.cubic_spline_interpolation(joint_pos_traj)
-        else:
-            self.optimization_failed = True
-            self.joint_trajectory = np.array([])
+    def _plan_trajectory_thread(self):
+        while not self.has_planned:
+            if self._obs is None:
+                continue
+            t_predict = 1.0
+            defend_line = 0.8
+            print("defending agent: _plan_trajectory_thread")
+            state, P, t_predict = self.puck_tracker.get_prediction(t_predict, defend_line)
+            if np.linalg.det(P[:2, :2]) < 1e-3:
+                joint_pos = self.get_joint_pos(self._obs)
+                joint_vel = self.get_joint_vel(self._obs)
+                puck_pos = state[[0, 1, 4]]
+                ee_pos, _ = self.get_ee_pose(self._obs)
 
-    def plan_ee_trajectory(self, puck_pos, ee_pos):
-        goal_pos = np.array([0.98, 0.0, 0.0])
-        goal_pos_robot = world_to_robot(self.env_info["robot"]["base_frame"][0], goal_pos)
-        goal_pos_2d = goal_pos_robot[0][:2]
+                ee_traj, switch_idx = self.plan_ee_trajectory(puck_pos, ee_pos, t_predict)
+                _, joint_pos_traj = self.optimizer.optimize_trajectory(ee_traj, joint_pos, joint_vel, None)
+                if len(joint_pos_traj) > 0:
+                    self.cubic_spline_interpolation(joint_pos_traj)
+                else:
+                    self.optimization_failed = True
+                    self.joint_trajectory = np.array([])
 
-        hit_dir_2d = goal_pos_2d - puck_pos[:2]
-        hit_dir_2d = hit_dir_2d / np.linalg.norm(hit_dir_2d)
+                self.has_planned = True
+            else:
+                time.sleep(0.01)
 
-        hit_pos_2d = puck_pos[:2] - hit_dir_2d * (
-                self.env_info['puck']['radius'] + self.env_info['mallet']['radius'])
+    def plan_ee_trajectory(self, puck_pos, ee_pos, t_plan):
+        hit_dir_2d = np.array([0., np.sign(puck_pos[1])])
+
+        hit_pos_2d = puck_pos[:2] - hit_dir_2d * (self.env_info['mallet']['radius'])
 
         start_pos_2d = ee_pos[:2]
 
-        hit_pos_3d = np.concatenate([hit_pos_2d, [self.ee_height]])
-        hit_dir_3d = np.concatenate([hit_dir_2d, [0.]])
-        success, q_anchor = self.optimizer.solve_hit_config_ik_null(hit_pos_3d, hit_dir_3d, self.joint_anchor_pos)
-        if not success:
-            q_anchor = self.joint_anchor_pos
-
-        hit_vel = 1.0
-        self.bezier_planner.compute_control_point(start_pos_2d, np.zeros(2), hit_pos_2d, hit_dir_2d * hit_vel)
+        hit_vel = 0
+        print("---------------------------------------------------------------------")
+        print("defending agent: plan_ee_trajectory")
+        print("-------------------------------------------------------------------------")
+        self.bezier_planner.compute_control_point(start_pos_2d, np.zeros(2), hit_pos_2d, hit_dir_2d * hit_vel, t_plan)
 
         res = np.array([self.bezier_planner.get_point(t_i) for t_i in np.arange(0, self.bezier_planner.t_final + 1e-6,
                                                                                 self.dt)])
@@ -137,7 +147,7 @@ class HittingAgent(AgentBase):
         last_vel_2d = hit_traj[-1, 3:5]
 
         # Plan Return Trajectory
-        stop_point = last_point_2d + hit_dir_2d * np.minimum(0.1, (1.2 - last_point_2d[1]) / hit_dir_2d[0])
+        stop_point = last_point_2d + hit_dir_2d * 0.1
         stop_point[1] = 0
         self.bezier_planner.compute_control_point(last_point_2d, last_vel_2d, stop_point, np.zeros(2), 1.5)
 
@@ -153,27 +163,12 @@ class HittingAgent(AgentBase):
         return_traj = np.hstack([p, dp, ddp])
 
         ee_traj = np.vstack([hit_traj, return_traj])
-        #print("sono dentro hitting_agent e sto calcolando la nuova traiettoria del ee")
-        return ee_traj, len(hit_traj), q_anchor
-
-    def get_joint_trajectory(self, ee_traj):
-        init_q = self.last_cmd[0]
-        joint_pos_traj = list()
-        while len(ee_traj) > 0:
-            ee_pos_des = ee_traj[0][:3]
-            ee_traj = ee_traj[1:]
-            success, joint_pos_des = inverse_kinematics(self.robot_model, self.robot_data,
-                                                        ee_pos_des, initial_q=init_q)
-            if not success:
-                joint_pos_traj.clear()
-                return joint_pos_traj
-            init_q = joint_pos_des
-            joint_pos_traj.append(joint_pos_des[:self.env_info['robot']['n_joints']])
-        return joint_pos_traj
+        return ee_traj, len(hit_traj)
 
     def cubic_spline_interpolation(self, joint_pos_traj):
         joint_pos_traj = np.array(joint_pos_traj)
-        t = np.linspace(1, joint_pos_traj.shape[0], joint_pos_traj.shape[0]) * 0.02
+        print("defending_agent: cubic spline interpolation")
+        t = np.linspace(1, joint_pos_traj.shape[0] + 1, joint_pos_traj.shape[0]) * 0.02
 
         f = CubicSpline(t, joint_pos_traj, axis=0)
         df = f.derivative(1)
@@ -182,9 +177,17 @@ class HittingAgent(AgentBase):
 
 def main():
     from air_hockey_challenge.framework.air_hockey_challenge_wrapper import AirHockeyChallengeWrapper
-    env = AirHockeyChallengeWrapper(env="3dof-hit", action_type="position-velocity", interpolation_order=3, debug=True)
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use("tkAgg")
 
-    agent = HittingAgent(env.base_env.env_info)
+    env = AirHockeyChallengeWrapper(env="3dof-defend", debug=True)
+
+    agent = DefendingAgent(env.base_env.env_info)
+    
+    print("*****************************************************")
+    print("defending_agent main")
+    print("**************************************************")
 
     obs = env.reset()
     agent.reset()
@@ -193,26 +196,24 @@ def main():
     while True:
         steps += 1
         action = agent.draw_action(obs)
-        print("--------------------------------------------------------------")
-        print("hitting_agent, azione da compiere: ", action)
-        print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
         obs, reward, done, info = env.step(action)
         env.render()
 
         if done or steps > env.info.horizon / 2:
-            import matplotlib.pyplot as plt
-            trajectory_record = np.array(env.base_env.controller_record)
             nq = env.base_env.env_info['robot']['n_joints']
-
-            fig, axes = plt.subplots(3, nq)
-            for j in range(nq):
-                axes[0, j].plot(trajectory_record[:, j])
-                axes[0, j].plot(trajectory_record[:, j + nq])
-                axes[1, j].plot(trajectory_record[:, j + 2 * nq])
-                axes[1, j].plot(trajectory_record[:, j + 3 * nq])
-                # axes[2, j].plot(trajectory_record[:, j + 4 * nq])
-                axes[2, j].plot(trajectory_record[:, j + nq] - trajectory_record[:, j])
-            plt.show()
+            if env.base_env.debug:
+                trajectory_record = np.array(env.base_env.controller_record)
+                fig, axes = plt.subplots(5, nq)
+                nq_total = nq * env.base_env.n_agents
+                for j in range(nq):
+                    axes[0, j].plot(trajectory_record[:, j])
+                    axes[0, j].plot(trajectory_record[:, j + nq_total])
+                    axes[1, j].plot(trajectory_record[:, j + 2 * nq_total])
+                    axes[1, j].plot(trajectory_record[:, j + 3 * nq_total])
+                    axes[2, j].plot(trajectory_record[:, j + 4 * nq_total])
+                    axes[3, j].plot(trajectory_record[:, j + 5 * nq_total])
+                    axes[4, j].plot(trajectory_record[:, j + nq_total] - trajectory_record[:, j])
+                plt.show()
 
             steps = 0
             obs = env.reset()

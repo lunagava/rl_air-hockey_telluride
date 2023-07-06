@@ -108,19 +108,21 @@ def main(args):
     T = len(ep_rewards[0][-1])
     t = np.arange(0, int(T))
     
-    plt.figure(figsize = (15,5))
-    plt.plot(t, value(0.95, t, ep_rewards), label='ideal value')
-    plt.plot(ep_values[0][-1], label='actual value')
-    plt.legend()
-    plt.ylabel('Value')
-    plt.xlabel('Time Step')
-    plt.show()
-    plt.savefig(args['data_dir']+"/ideal_val.pdf")
+    # plt.figure(figsize = (15,5))
+    # #plt.plot(t, value(0.95, t, ep_rewards), label='ideal value')
+    # value = np.ones(t.shape())
+    # plt.plot(t, value, label='ideal value')
+    # plt.plot(ep_values[0][-1], label='actual value')
+    # plt.legend()
+    # plt.ylabel('Value')
+    # plt.xlabel('Time Step')
+    # plt.show()
+    # plt.savefig(args['data_dir']+"/ideal_val.pdf")
     
-    print('Plotting policy')
-    ## Plot state and action values   
+    print('Plotting policy')  # vedere come modificarlo
+    # Plot state and action values
     plot_table(args, policy[0])
-    ## Plot the policy
+    # Plot the policy
     plot_policy(args, policy[0])
     
     ## Finished
@@ -129,7 +131,8 @@ def main(args):
     
 ## Setting Parameters ##
 if __name__ == '__main__':
-    directory = input("Enter path for saving the data? ") 
+    #directory = input("Enter path for saving the data? ")
+    directory = "/home/mgermani/jupy"
     while not os.path.exists(directory):
         print("Path of the file is Invalid")
         directory = input("Enter path for saving the data? ")
@@ -149,7 +152,7 @@ if __name__ == '__main__':
     continuous = True             ## set to false to use discrete time. Only relevant when using TDtheta learning rule
     q = 50                        ## number of internal state dimensions per input
     
-    trials = 10                  ## number of learning trials
+    trials = 500                  ## number of learning trials # era 500
     
     params = {'rep':representation, 'rule': rule, 'alpha':alpha,
              'beta': beta, 'gamma':gamma, 'neurons':neurons,

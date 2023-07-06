@@ -25,8 +25,8 @@ class ActorCriticLearn(pytry.Trial):
        # self.param('gym environment: MiniGrid, MountainCar, CartPole or LunarLander', env='MiniGrid')
         self.param('gym environment: MiniGrid, AirHockeyChallenge, MountainCar, CartPole or LunarLander', env='AirHockeyChallenge')
         self.param('representation', rep = rp.OneHotRep((8,8,4)))
-        self.param('number of learning trials', trials=1000),
-        self.param('length of each trial', steps=200),
+        self.param('number of learning trials', trials=10),
+        self.param('length of each trial', steps=200), # era 200
         self.param('select learning rule: rules.ActorCriticTD0, rules.ActorCriticTDn or rules.ActorCriticTDLambda', 
                    rule=rules.ActorCriticTD0)
         self.param('n for TD(n)', n=None),
@@ -57,7 +57,7 @@ class ActorCriticLearn(pytry.Trial):
         if param.env == 'MiniGrid':
             env = minigrid_wrap.MiniGrid_wrapper()
         elif param.env == 'AirHockeyChallenge':
-            env = AirHockeyChallengeWrapper(env="3dof-hit", action_type="position-velocity", interpolation_order=3, debug=True)
+            env = AirHockeyChallengeWrapper(env="3dof-defend", debug=True)
         elif param.env == 'MountainCar':
             env = gym.make("MountainCar-v0")
         elif param.env == 'CartPole':
@@ -79,7 +79,7 @@ class ActorCriticLearn(pytry.Trial):
         sparsity = param.sparsity
         report_weights = param.report_weights
         #n_actions = env.action_space.n
-        n_actions = 1 #MG
+        n_actions = 6 #(e.g move right, move left, move sligthly to the left, and stand still)
         
         ## LDN parameters
         continuous = param.continuous
@@ -112,32 +112,20 @@ class ActorCriticLearn(pytry.Trial):
         
         ## LEARNING ##
         for trial in tqdm(range(trials)):
-            #print('----------------------trial: ', trial)
+            print('----------------------trial: ', trial)
             rs=[] ##reward storage
             vs=[] ##value storage
             env.reset() ##reset environment
             update_state = rep.get_state(env.reset(), env) ##get state
             puck_position = update_state[0:2]
-            #print('puck position: ', puck_position)
             joint_position = update_state[6:8]
-            #print('robot position: ', joint_position)
             update_state_air_hockey = np.concatenate((joint_position, puck_position), axis=0)
-            #print("state: ", update_state_air_hockey)
             
             value, action_logits = ac.step(update_state_air_hockey, 0, 0, reset=True) ##get state and action values
-            
-            #print("action_logits: ", action_logits)
-
-            action_distribution = softmax(action_logits)
-            action_decided = np.random.choice(n_actions, 1, p=action_distribution)
-
-            agent = env.render()  # dovrebbe mostrare l'ambiente
-            #obs = env.reset()  # MG
 
 
-            #obs = env.reset()  # MG
-            #agent.reset()  # MG
-            #action_defined = agent.draw_action(obs)  # MG
+            # mostro l'ambiente e creo l'agente che deve difendere
+            agent = env.render()
 
             ## For each time step
             for i in range(steps): 
@@ -149,18 +137,23 @@ class ActorCriticLearn(pytry.Trial):
                 else:
                     obs = info[3]
 
-                info, step_info = env.core_step(i, env, obs, agent, True)
-                #print("info: ", info)
+                # Choose and do action
+                action_distribution = softmax(action_logits)
+                action_decided = np.random.choice(n_actions, 1, p=action_distribution)
+                print("action_decided: ", action_decided)
+                info, step_info = env.core_step(i, action_decided, env, obs, agent, True)
+
                 obs = info[3]
                 action = info[1]
                 reward = info[2]
                 done = info[4]
-                #obs, reward, done, info = env.step(info.action)
+                if done is True:
+                    print("task succeeded")
+                    reward = reward+1
                 env.render()
 
                 ## Get new state
                 current_state = rep.get_state(obs, env)
-                #print("current_ state: ", current_state)
                 ## Update state and action values 
                 value, action_logits = ac.step(current_state, action_decided, reward)
                 
@@ -201,8 +194,9 @@ class ActorCriticLearn(pytry.Trial):
                           
             Ep_rewards.append(np.nansum(rs)) ##Store average reward for episode
             Rewards.append(rs) ##Store all rewards in episode
-            Values.append(vs) ##Store all values in episode  
-        #env.close() ##Uncomment if rendering the environment
+            Values.append(vs) ##Store all values in episode
+
+        env.close() ##Uncomment if rendering the environment
         
 
         ## Convert list of rewards per episode to dataframe    
