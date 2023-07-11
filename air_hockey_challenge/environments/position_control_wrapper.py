@@ -165,7 +165,7 @@ class PositionControl:
         self.traj = self._interpolate_trajectory(self.action)
 
     def _compute_action(self, obs, action):
-        print("-------------------------------------------------------------------------------------")
+        # print("-------------------------------------------------------------------------------------")
         cur_pos, cur_vel = self.get_joints(obs)
         # print("Osservazione: ", obs)
         # print("current position: ", cur_pos)

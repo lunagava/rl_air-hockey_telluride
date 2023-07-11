@@ -223,17 +223,17 @@ class SSPRep(object):
         r = self.power(self.Vs[0], state[0]*self.scale[0])
         #print("r: ", r)
         #print("Vs: ", self.Vs[0])
-        print("state: ", state[0])
+        # print("state: ", state[0])
         if(len(state)>4):
             puck_position = state[0:2]
-            print('puck position: ', puck_position)
+            # print('puck position: ', puck_position)
             robot_position = state[6:8]
-            print('robot position: ', robot_position)
+            # print('robot position: ', robot_position)
             state = np.concatenate((robot_position, puck_position), axis=0)
-        print("scale: ", self.scale[0])
-        print("lunghezza Vs: ", len(self.Vs[0]))
-        print("lunghezza r: ", len(r))
-        print("lunghezza stato: ", len(state))
+        # print("scale: ", self.scale[0])
+        # print("lunghezza Vs: ", len(self.Vs[0]))
+        # print("lunghezza r: ", len(r))
+        # print("lunghezza stato: ", len(state))
         for i in range(1, len(state)):
             r = r * self.power(self.Vs[i], state[i]*self.scale[i])
         return r.v

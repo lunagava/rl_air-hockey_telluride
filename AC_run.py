@@ -108,22 +108,22 @@ def main(args):
     T = len(ep_rewards[0][-1])
     t = np.arange(0, int(T))
     
-    # plt.figure(figsize = (15,5))
-    # #plt.plot(t, value(0.95, t, ep_rewards), label='ideal value')
-    # value = np.ones(t.shape())
-    # plt.plot(t, value, label='ideal value')
-    # plt.plot(ep_values[0][-1], label='actual value')
-    # plt.legend()
-    # plt.ylabel('Value')
-    # plt.xlabel('Time Step')
-    # plt.show()
-    # plt.savefig(args['data_dir']+"/ideal_val.pdf")
+    plt.figure(figsize = (15,5))
+    #plt.plot(t, value(0.95, t, ep_rewards), label='ideal value')
+    value = np.ones(len(t))
+    plt.plot(t, value, label='ideal value')
+    plt.plot(ep_values[0][-1], label='actual value')
+    plt.legend()
+    plt.ylabel('Value')
+    plt.xlabel('Time Step')
+    plt.show()
+    plt.savefig(args['data_dir']+"/ideal_val.pdf")
     
     print('Plotting policy')  # vedere come modificarlo
     # Plot state and action values
     plot_table(args, policy[0])
     # Plot the policy
-    plot_policy(args, policy[0])
+    # plot_policy(args, policy[0])
     
     ## Finished
     print('Done.')
@@ -152,7 +152,7 @@ if __name__ == '__main__':
     continuous = True             ## set to false to use discrete time. Only relevant when using TDtheta learning rule
     q = 50                        ## number of internal state dimensions per input
     
-    trials = 500                  ## number of learning trials # era 500
+    trials = 10                  ## number of learning trials # era 500
     
     params = {'rep':representation, 'rule': rule, 'alpha':alpha,
              'beta': beta, 'gamma':gamma, 'neurons':neurons,

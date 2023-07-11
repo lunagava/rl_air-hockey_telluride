@@ -112,7 +112,7 @@ class ActorCriticLearn(pytry.Trial):
         
         ## LEARNING ##
         for trial in tqdm(range(trials)):
-            print('----------------------trial: ', trial)
+            # print('----------------------trial: ', trial)
             rs=[] ##reward storage
             vs=[] ##value storage
             env.reset() ##reset environment
@@ -126,6 +126,7 @@ class ActorCriticLearn(pytry.Trial):
 
             # mostro l'ambiente e creo l'agente che deve difendere
             agent = env.render()
+        # print("-------------------------------------------------------------------------------------")
 
             ## For each time step
             for i in range(steps): 
@@ -140,7 +141,7 @@ class ActorCriticLearn(pytry.Trial):
                 # Choose and do action
                 action_distribution = softmax(action_logits)
                 action_decided = np.random.choice(n_actions, 1, p=action_distribution)
-                print("action_decided: ", action_decided)
+                # print("action_decided: ", action_decided)
                 info, step_info = env.core_step(i, action_decided, env, obs, agent, True)
 
                 obs = info[3]
@@ -148,7 +149,7 @@ class ActorCriticLearn(pytry.Trial):
                 reward = info[2]
                 done = info[4]
                 if done is True:
-                    print("task succeeded")
+                    # print("task succeeded")
                     reward = reward+1
                 env.render()
 
