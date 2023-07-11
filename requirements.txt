@@ -1,0 +1,13 @@
+gym
+minigrid
+mujoco
+mushroom-rl
+nengo
+nengo-spa
+nlopt
+osqp
+pandas
+pytry
+scipy
+tqdm
+
